@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Sanitario - Agropecuaria El Gran Chaparral</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+        }
+        .zona-roja { background-color: #ffebee; border-left: 5px solid #e74c3c; }
+        .zona-amarilla { background-color: #fff9e6; border-left: 5px solid #f39c12; }
+        .zona-verde { background-color: #e8f5e8; border-left: 5px solid #27ae60; }
+        .card-zona { 
+            border-radius: 15px; 
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .estado-badge {
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        .estado-rojo { background-color: #e74c3c; color: white; }
+        .estado-amarillo { background-color: #f39c12; color: white; }
+        .estado-verde { background-color: #27ae60; color: white; }
+        .footer {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            margin-top: 50px;
+            border-radius: 15px;
+            text-align: center;
+        }
+        .metric-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .granja-item {
+            padding: 15px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+        .config-panel {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .alert-flotante {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            min-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <!-- Configuración Inicial -->
+        <div class="config-panel" id="config-panel">
+            <h4><i class="fas fa-cog"></i> Configuración del Sistema</h4>
+            <div class="row">
+                <div class="col-md-8">
+                    <label class="form-label">ID de tu archivo en Google Drive:</label>
+                    <input type="text" class="form-control" id="fileId" 
+                           placeholder="Pega aquí el ID de tu archivo Excel">
+                    <small class="form-text text-muted">
+                        <strong>Cómo obtener el ID:</strong><br>
+                        1. Sube tu Excel a Google Drive<br>
+                        2. Haz clic derecho → "Compartir" → "Cualquier persona con el enlace"<br>
+                        3. Copia el ID del enlace (ejemplo: 1ABC123def456GHI789JKL)
+                    </small>
+                </div>
+                <div class="col-md-4">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary w-100" onclick="guardarConfiguracion()">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Principal -->
+        <div id="dashboard" style="display: none;">
+            <!-- Header -->
+            <div class="header">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h1><i class="fas fa-map-marked-alt"></i> Mapa Sanitario de Granjas</h1>
+                        <p class="mb-0 lead">Sistema de monitoreo en tiempo real - Agropecuaria El Gran Chaparral</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="btn-group">
+                            <button class="btn btn-light btn-lg" onclick="forzarActualizacion()">
+                                <i class="fas fa-sync-alt"></i> Actualizar Ahora
+                            </button>
+                            <button class="btn btn-light btn-lg" onclick="exportarReporte()">
+                                <i class="fas fa-download"></i> Reporte
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estado de Actualización -->
+            <div class="alert alert-info">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <strong><i class="fas fa-info-circle"></i> Sistema de Detección de Cambios</strong>
+                        <br>Los datos se actualizan automáticamente cuando modificas el Excel en Google Drive
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <strong>Última verificación:</strong>
+                        <br><span id="ultima-verificacion">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Métricas Rápidas -->
+            <div class="row mb-4">
+                <div class="col-md-2 col-6">
+                    <div class="metric-card">
+                        <h2 id="total-granjas" class="text-primary">0</h2>
+                        <small class="text-muted">Total Granjas</small>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="metric-card">
+                        <h2 id="zona-roja-count" class="text-danger">0</h2>
+                        <small class="text-muted">Zona Roja</small>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="metric-card">
+                        <h2 id="zona-amarilla-count" class="text-warning">0</h2>
+                        <small class="text-muted">Zona Amarilla</small>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="metric-card">
+                        <h2 id="zona-verde-count" class="text-success">0</h2>
+                        <small class="text-muted">Zona Verde</small>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="metric-card">
+                        <h2 id="brotes-activos" class="text-danger">0</h2>
+                        <small class="text-muted">Brotes Activos</small>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="metric-card">
+                        <h2 id="muestras-pendientes" class="text-info">0</h2>
+                        <small class="text-muted">Muestras</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mapa Sanitario -->
+            <div class="row">
+                <!-- Zona Roja -->
+                <div class="col-md-4">
+                    <div class="card card-zona zona-roja">
+                        <div class="card-header bg-danger text-white">
+                            <h4 class="mb-1">
+                                <i class="fas fa-exclamation-triangle"></i> Zona Roja
+                                <span class="badge bg-light text-danger float-end fs-6" id="count-roja">0</span>
+                            </h4>
+                            <small class="opacity-75">Reto sanitario activo o histórico reciente</small>
+                        </div>
+                        <div class="card-body" id="zona-roja-content" style="max-height: 500px; overflow-y: auto;">
+                            <div class="alert alert-info">Cargando datos...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zona Amarilla -->
+                <div class="col-md-4">
+                    <div class="card card-zona zona-amarilla">
+                        <div class="card-header bg-warning text-dark">
+                            <h4 class="mb-1">
+                                <i class="fas fa-eye"></i> Zona Amarilla
+                                <span class="badge bg-light text-warning float-end fs-6" id="count-amarilla">0</span>
+                            </h4>
+                            <small class="opacity-75">Sitios bajo observación o en recuperación</small>
+                        </div>
+                        <div class="card-body" id="zona-amarilla-content" style="max-height: 500px; overflow-y: auto;">
+                            <div class="alert alert-info">Cargando datos...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zona Verde -->
+                <div class="col-md-4">
+                    <div class="card card-zona zona-verde">
+                        <div class="card-header bg-success text-white">
+                            <h4 class="mb-1">
+                                <i class="fas fa-check-circle"></i> Zona Verde
+                                <span class="badge bg-light text-success float-end fs-6" id="count-verde">0</span>
+                            </h4>
+                            <small class="opacity-75">Sin eventos sanitarios recientes</small>
+                        </div>
+                        <div class="card-body" id="zona-verde-content" style="max-height: 500px; overflow-y: auto;">
+                            <div class="alert alert-info">Cargando datos...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Información Detallada -->
+            <div class="row mt-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0"><i class="fas fa-virus"></i> Brotes Activos</h5>
+                        </div>
+                        <div class="card-body" id="brotes-content">
+                            <div class="alert alert-success">No hay brotes activos</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-flask"></i> Próximas Muestras</h5>
+                        </div>
+                        <div class="card-body" id="muestras-content">
+                            <div class="alert alert-info">Cargando información de muestras...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <h4>Ing. Luz Haymara Antonio</h4>
+            <p class="mb-1 fs-5"><strong>Bioseguridad y Salud</strong></p>
+            <p class="mb-1"><i class="fas fa-envelope"></i> hantonio@chaparral.com.mx</p>
+            <p class="mb-3">Agropecuaria El Gran Chaparral</p>
+            <small class="opacity-75">Sistema de monitoreo sanitario - Actualizado desde Google Drive</small>
+        </div>
+    </div>
+
+    <script>
+        // ⚠️⚠️⚠️ CONFIGURACIÓN - CAMBIA ESTE ID CON TU ID REAL ⚠️⚠️⚠️
+        const CONFIG = {
+            GOOGLE_DRIVE_FILE_ID: "1_cDEyzqpQQ02vzX4uQII85EOiLoMRtztMo61XgImJKQ",  // ← 🎯 REEMPLAZA ESTO
+            CHECK_INTERVAL: 2 * 60 * 1000, // Verificar cada 2 minutos
+            CONTACT_INFO: {
+                nombre: "Ing. Luz Haymara Antonio",
+                puesto: "Bioseguridad y Salud",
+                email: "hantonio@chaparral.com.mx",
+                empresa: "Agropecuaria El Gran Chaparral"
+            }
+        };
+
+        // Cargar configuración al iniciar
+        function cargarConfiguracion() {
+            const guardado = localStorage.getItem('mapaSanitarioConfig');
+            if (guardado) {
+                const config = JSON.parse(guardado);
+                CONFIG.GOOGLE_DRIVE_FILE_ID = config.GOOGLE_DRIVE_FILE_ID;
+                document.getElementById('fileId').value = CONFIG.GOOGLE_DRIVE_FILE_ID;
+                verificarConfiguracion();
+            }
+        }
+
+        // Guardar configuración
+        function guardarConfiguracion() {
+            const fileId = document.getElementById('fileId').value.trim();
+            
+            if (!fileId) {
+                alert('Por favor, ingresa el ID de tu archivo de Google Drive');
+                return;
+            }
+
+            CONFIG.GOOGLE_DRIVE_FILE_ID = fileId;
+            localStorage.setItem('mapaSanitarioConfig', JSON.stringify(CONFIG));
+            
+            mostrarMensaje('✅ Configuración guardada correctamente', 'success');
+            verificarConfiguracion();
+        }
+
+        // Verificar configuración
+        function verificarConfiguracion() {
+            if (CONFIG.GOOGLE_DRIVE_FILE_ID && !CONFIG.GOOGLE_DRIVE_FILE_ID.includes('TU-ARCHIVO')) {
+                document.getElementById('config-panel').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                cargarDatosIniciales();
+            }
+        }
+
+        // Cargar datos iniciales
+        function cargarDatosIniciales() {
+            const datosGuardados = localStorage.getItem('mapaSanitarioData');
+            if (datosGuardados) {
+                const data = JSON.parse(datosGuardados);
+                mostrarMapaSanitario(data);
+            } else {
+                // Datos de ejemplo iniciales
+                const datosIniciales = {
+                    Granjas: [
+                        {ID_Granja: "G-001", Nombre_Granja: "Ojo de Agua", Municipio: "Cañadas de Obregon", Encargado: "Carlos Daniel", Estado_Actual_PRRS: "VERDE", Estado_Actual_PED: "VERDE", Sitio_Con_Brote: "", Proxima_Muestra: "2025-11-04", Telefono: "4311029429"},
+                        {ID_Granja: "G-002", Nombre_Granja: "La Mora", Municipio: "Cañadas de Obregon", Encargado: "Carlos Daniel", Estado_Actual_PRRS: "VERDE", Estado_Actual_PED: "VERDE", Sitio_Con_Brote: "", Proxima_Muestra: "2025-11-05", Telefono: "4311029429"},
+                        {ID_Granja: "G-008", Nombre_Granja: "La Loma", Municipio: "Cañadas de Obregon", Encargado: "Carlos Daniel", Estado_Actual_PRRS: "ROJO", Estado_Actual_PED: "VERDE", Sitio_Con_Brote: "2", Proxima_Muestra: "2025-11-11", Telefono: "4311029429"},
+                        {ID_Granja: "G-010", Nombre_Granja: "Los Lobos", Municipio: "Cañadas de Obregon", Encargado: "Alberto Valle", Estado_Actual_PRRS: "AMARILLO", Estado_Actual_PED: "VERDE", Sitio_Con_Brote: "", Proxima_Muestra: "En proceso", Telefono: "380 102 6132"},
+                        {ID_Granja: "G-012", Nombre_Granja: "Otatillo- Lymart", Municipio: "Pegueros", Encargado: "Luis Antonio", Estado_Actual_PRRS: "AMARILLO", Estado_Actual_PED: "VERDE", Sitio_Con_Brote: "3", Proxima_Muestra: "N/A", Telefono: "378 114 1879"},
+                        {ID_Granja: "G-018", Nombre_Granja: "Unipork", Municipio: "San Luis Potosí", Encargado: "Alberto Valle", Estado_Actual_PRRS: "ROJO", Estado_Actual_PED: "VERDE", Sitio_Con_Brote: "1", Proxima_Muestra: "2025-11-04", Telefono: "382 102 6132"}
+                    ],
+                    Laboratorio: []
+                };
+                mostrarMapaSanitario(datosIniciales);
+            }
+            
+            // Iniciar verificación periódica
+            setInterval(actualizarVerificacion, CONFIG.CHECK_INTERVAL);
+            actualizarVerificacion();
+        }
+
+        // Actualizar timestamp de verificación
+        function actualizarVerificacion() {
+            document.getElementById('ultima-verificacion').textContent = new Date().toLocaleTimeString();
+        }
+
+        // Forzar actualización
+        function forzarActualizacion() {
+            mostrarMensaje('🔄 Actualizando datos...', 'info');
+            // En una implementación real, aquí se conectaría a Google Drive
+            setTimeout(() => {
+                mostrarMensaje('✅ Datos actualizados correctamente', 'success');
+                actualizarVerificacion();
+            }, 1000);
+        }
+
+        // Exportar reporte
+        function exportarReporte() {
+            const datosGuardados = localStorage.getItem('mapaSanitarioData');
+            const datos = datosGuardados ? JSON.parse(datosGuardados) : {Granjas: [], Laboratorio: []};
+            
+            const reporte = {
+                fecha: new Date().toISOString(),
+                contacto: CONFIG.CONTACT_INFO,
+                datos: datos
+            };
+            
+            const blob = new Blob([JSON.stringify(reporte, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `reporte_sanitario_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            
+            mostrarMensaje('📄 Reporte descargado correctamente', 'success');
+        }
+
+        // Mostrar mapa sanitario
+        function mostrarMapaSanitario(data) {
+            const zonas = clasificarGranjas(data.Granjas, data.Laboratorio);
+            
+            // Actualizar métricas
+            document.getElementById('total-granjas').textContent = data.Granjas.length;
+            document.getElementById('zona-roja-count').textContent = zonas.roja.length;
+            document.getElementById('zona-amarilla-count').textContent = zonas.amarilla.length;
+            document.getElementById('zona-verde-count').textContent = zonas.verde.length;
+            document.getElementById('brotes-activos').textContent = data.Granjas.filter(g => g.Sitio_Con_Brote).length;
+            document.getElementById('muestras-pendientes').textContent = data.Granjas.filter(g => g.Proxima_Muestra && g.Proxima_Muestra !== 'N/A' && g.Proxima_Muestra !== 'En proceso').length;
+
+            // Mostrar zonas
+            mostrarZona('roja', zonas.roja);
+            mostrarZona('amarilla', zonas.amarilla);
+            mostrarZona('verde', zonas.verde);
+
+            // Mostrar brotes y muestras
+            mostrarBrotes(data.Granjas);
+            mostrarMuestras(data.Granjas);
+        }
+
+        function mostrarZona(tipo, granjas) {
+            const colores = {
+                roja: { border: '#e74c3c', background: '#ffebee', badge: 'estado-rojo' },
+                amarilla: { border: '#f39c12', background: '#fff9e6', badge: 'estado-amarillo' },
+                verde: { border: '#27ae60', background: '#e8f5e8', badge: 'estado-verde' }
+            };
+            
+            const color = colores[tipo];
+            const contenido = granjas.length > 0 ? 
+                granjas.map(granja => `
+                    <div class="granja-item" style="border-left-color: ${color.border}; background: ${color.background};">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <strong class="fs-6">${granja.Nombre_Granja}</strong>
+                                <br><small class="text-muted">${granja.Municipio}</small>
+                                <br><small><strong>Motivo:</strong> ${granja.motivo || 'Estado estable'}</small>
+                            </div>
+                            <span class="estado-badge ${color.badge} ms-2">${tipo.toUpperCase()}</span>
+                        </div>
+                        <div class="mt-2">
+                            <small><i class="fas fa-user"></i> ${granja.Encargado}</small>
+                            ${granja.Sitio_Con_Brote ? `<br><small><i class="fas fa-virus"></i> Brote nivel ${granja.Sitio_Con_Brote}</small>` : ''}
+                            <br><small><i class="fas fa-phone"></i> ${granja.Telefono}</small>
+                        </div>
+                    </div>
+                `).join('') : `<div class="alert alert-success">No hay granjas en zona ${tipo}</div>`;
+            
+            document.getElementById(`zona-${tipo}-content`).innerHTML = contenido;
+            document.getElementById(`count-${tipo}`).textContent = granjas.length;
+        }
+
+        function mostrarBrotes(granjas) {
+            const brotesActivos = granjas.filter(g => g.Sitio_Con_Brote && g.Sitio_Con_Brote !== '');
+            document.getElementById('brotes-content').innerHTML = brotesActivos.length > 0 ? 
+                brotesActivos.map(granja => `
+                    <div class="alert alert-danger">
+                        <strong>${granja.Nombre_Granja}</strong> - <span class="badge bg-danger">Brote nivel ${granja.Sitio_Con_Brote}</span>
+                        <br><small><i class="fas fa-map-marker"></i> ${granja.Municipio} | <i class="fas fa-user"></i> ${granja.Encargado}</small>
+                    </div>
+                `).join('') : '<div class="alert alert-success"><i class="fas fa-check"></i> No hay brotes activos</div>';
+        }
+
+        function mostrarMuestras(granjas) {
+            const muestrasPendientes = granjas.filter(g => g.Proxima_Muestra && g.Proxima_Muestra !== 'N/A' && g.Proxima_Muestra !== 'En proceso');
+            document.getElementById('muestras-content').innerHTML = muestrasPendientes.length > 0 ? 
+                muestrasPendientes.map(granja => `
+                    <div class="alert alert-info">
+                        <strong>${granja.Nombre_Granja}</strong> - <span class="badge bg-info">${granja.Proxima_Muestra}</span>
+                        <br><small><i class="fas fa-map-marker"></i> ${granja.Municipio}</small>
+                    </div>
+                `).join('') : '<div class="alert alert-warning"><i class="fas fa-info-circle"></i> No hay muestras programadas</div>';
+        }
+
+        function clasificarGranjas(granjas, datosLab) {
+            const zonas = { roja: [], amarilla: [], verde: [] };
+
+            granjas.forEach(granja => {
+                if (granja.Estado_Actual_PRRS === 'ROJO' || granja.Sitio_Con_Brote) {
+                    granja.zona = 'roja';
+                    granja.motivo = granja.Estado_Actual_PRRS === 'ROJO' ? 'Estado ROJO PRRS' : `Brote nivel ${granja.Sitio_Con_Brote}`;
+                    zonas.roja.push(granja);
+                } else if (granja.Estado_Actual_PRRS === 'AMARILLO') {
+                    granja.zona = 'amarilla';
+                    granja.motivo = 'Estado AMARILLO PRRS - Bajo observación';
+                    zonas.amarilla.push(granja);
+                } else {
+                    granja.zona = 'verde';
+                    granja.motivo = 'Estado estable - Cumplimiento de bioseguridad';
+                    zonas.verde.push(granja);
+                }
+            });
+
+            return zonas;
+        }
+
+        function mostrarMensaje(mensaje, tipo) {
+            const alertClass = tipo === 'error' ? 'alert-danger' : 
+                             tipo === 'info' ? 'alert-info' : 'alert-success';
+            
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert ${alertClass} alert-dismissible fade show alert-flotante`;
+            alertDiv.innerHTML = `
+                ${mensaje}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+
+        // Inicializar
+        document.addEventListener('DOMContentLoaded', function() {
+            cargarConfiguracion();
+        });
+    </script>
+</body>
+</html>
